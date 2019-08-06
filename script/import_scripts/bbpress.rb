@@ -160,6 +160,49 @@ class ImportScripts::Bbpress < ImportScripts::Base
     end
   end
 
+  def import_tags
+    puts "", "importing tags..."
+
+    tag_mapping = {}
+
+    tags = bbpress_query(<<-SQL
+      SELECT terms.term_id,slug
+        FROM #{BB_PRESS_PREFIX}term_taxonomy AS term_taxonomy
+        LEFT JOIN #{BB_PRESS_PREFIX}terms 
+          AS terms 
+          ON terms.`term_id` = term_taxonomy.`term_id`
+        WHERE term_taxonomy.`taxonomy` = 'topic-tag'
+    SQL
+    )
+
+    # Import and Map Tags First
+    tags.each do |t|
+      tag_name = DiscourseTagging.clean_tag(t['slug'])
+      tag = Tag.find_by_name(tag_name) || Tag.create(name: tag_name)
+      tag_mapping[t['term_id']] = tag.id
+    end
+
+    tags_post_relations = bbpress_query(<<-SQL
+      SELECT object_id as post_id, term_relationships.term_taxonomy_id 
+        FROM #{BB_PRESS_PREFIX}term_relationships AS term_relationships
+        LEFT JOIN #{BB_PRESS_PREFIX}term_taxonomy
+          AS term_taxonomy 
+          ON term_taxonomy.term_id = term_relationships.term_taxonomy_id
+         WHERE term_taxonomy.taxonomy = 'topic-tag'
+    SQL
+    )
+
+    tags_post_relations.each do |t|
+      existing_topic = topic_lookup_from_imported_post_id(t['post_id'])
+
+      if nil != tag_mapping[t['term_taxonomy_id']]
+        TopicTag.create(topic_id: existing_topic[:topic_id], tag_id: tag_mapping[t['term_taxonomy_id']])
+      else
+        puts "", "Could not find mapping for Tag ID: #{t['term_taxonomy_id']}"
+      end
+    end
+  end
+
   def import_categories
     puts "", "importing categories..."
 

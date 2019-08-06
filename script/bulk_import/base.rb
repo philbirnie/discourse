@@ -288,6 +288,10 @@ class BulkImport::Base
     topic_id tag_id created_at updated_at
   }
 
+  TAG_COLUMNS ||= %i{
+    id name topic_count created_at updated_at pm_topic_count
+  }
+
   def create_groups(rows, &block)
     create_records(rows, "group", GROUP_COLUMNS, &block)
   end
