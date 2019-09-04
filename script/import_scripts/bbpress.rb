@@ -168,8 +168,8 @@ class ImportScripts::Bbpress < ImportScripts::Base
     tags = bbpress_query(<<-SQL
       SELECT terms.term_id,slug
         FROM #{BB_PRESS_PREFIX}term_taxonomy AS term_taxonomy
-        LEFT JOIN #{BB_PRESS_PREFIX}terms 
-          AS terms 
+        LEFT JOIN #{BB_PRESS_PREFIX}terms
+          AS terms
           ON terms.`term_id` = term_taxonomy.`term_id`
         WHERE term_taxonomy.`taxonomy` = 'topic-tag'
     SQL
@@ -183,22 +183,32 @@ class ImportScripts::Bbpress < ImportScripts::Base
     end
 
     tags_post_relations = bbpress_query(<<-SQL
-      SELECT object_id as post_id, term_relationships.term_taxonomy_id 
+      SELECT object_id as post_id, term_relationships.term_taxonomy_id
         FROM #{BB_PRESS_PREFIX}term_relationships AS term_relationships
         LEFT JOIN #{BB_PRESS_PREFIX}term_taxonomy
-          AS term_taxonomy 
+          AS term_taxonomy
           ON term_taxonomy.term_id = term_relationships.term_taxonomy_id
-         WHERE term_taxonomy.taxonomy = 'topic-tag'
-    SQL
+        INNER JOIN #{BB_PRESS_PREFIX}posts
+          AS posts
+          ON term_relationships.object_id = posts.ID
+          WHERE term_taxonomy.taxonomy = 'topic-tag' AND (post_type = 'topic' OR post_type = 'reply')
+      SQL
     )
 
     tags_post_relations.each do |t|
       existing_topic = topic_lookup_from_imported_post_id(t['post_id'])
 
-      if nil != tag_mapping[t['term_taxonomy_id']]
-        TopicTag.create(topic_id: existing_topic[:topic_id], tag_id: tag_mapping[t['term_taxonomy_id']])
+      if nil != tag_mapping[t['term_taxonomy_id']] && nil != existing_topic
+        TopicTag.create(
+          topic_id: existing_topic[:topic_id],
+          tag_id: tag_mapping[t['term_taxonomy_id']]
+        )
       else
-        puts "", "Could not find mapping for Tag ID: #{t['term_taxonomy_id']}"
+        puts "", "Debug Data for failed Tag Relationship"
+        puts "", "Current Post ID: #{t['post_id']}"
+        puts "", "Current Term Taxonomy ID: #{t['term_taxonomy_id']}"
+        puts "","Could not find Existing Topic or..."
+        puts "","Could not find mapping for Tag ID: #{t['term_taxonomy_id']}"
       end
     end
   end
